@@ -4,19 +4,19 @@ import axios from 'axios'
 // import { ERR_OK } from 'api/config'
 import jsonp from 'common/js/jsonp'
 
-const debug = process.env.NODE_ENV !== 'production'
+// const debug = process.env.NODE_ENV !== 'production'
 
 export function getLyric(mid) {
-  const url = debug ? '/api/lyric' : 'http://ustbhuangyi.com/music/api/lyric'
+  const url = '/api/lyric'
 
   const data = Object.assign({}, commonParams, {
-    songmid: mid,
-    platform: 'yqq',
-    hostUin: 0,
-    needNewCode: 0,
-    categoryId: 10000000,
     pcachetime: +new Date(),
-    format: 'json'
+    songmid: mid,
+    g_tk: 1818343968,
+    hostUin: 0,
+    format: 'json',
+    platform: 'yqq',
+    needNewCode: 0
   })
 
   return axios.get(url, {
