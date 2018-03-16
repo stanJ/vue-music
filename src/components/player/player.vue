@@ -23,8 +23,8 @@
              @touchend="middleTouchEnd">
           <div class="middle-l" ref="middleL">
             <div class="cd-wrapper" ref="cdWrapper">
-              <div class="cd" :class="cdCls">
-                <img class="image" :src="currentSong.image">
+              <div class="cd" ref="imageWrapper">
+                <img ref="image" :class="cdCls" class="image" :src="currentSong.image">
               </div>
             </div>
             <div class="playing-lyric-wrapper">
@@ -39,6 +39,9 @@
                    :key="index"
                    :class="{'current': currentLineNum === index}"
                    v-for="(line, index) in currentLyric.lines">{{line.txt}}</p>
+              </div>
+              <div class="pure-music" v-show="isPureMusic">
+                <p>{{pureMusicLyric}}</p>
               </div>
             </div>
           </scroll>
@@ -78,7 +81,9 @@
     <transition name="mini">
       <div class="mini-player" v-show="!fullScreen" @click="open">
         <div class="icon">
-          <img :class="cdCls" width="40" height="40" :src="currentSong.image">
+          <div class="imgWrapper" ref="miniWrapper">
+            <img ref="miniImage" :class="cdCls" width="40" height="40" :src="currentSong.image">
+          </div>
         </div>
         <div class="text">
           <h2 class="name" v-html="currentSong.name"></h2>
@@ -97,7 +102,7 @@
     <playlist ref="playlist"></playlist>
     <audio ref="audio"
            :src="currentSong.url" 
-           @play="ready" 
+           @playing="ready" 
            @error="error"
            @timeupdate="updateTime"
            @ended="end"></audio>
@@ -119,6 +124,8 @@
   const transform = prefixStyle('transform')
   const transitionDuration = prefixStyle('transitionDuration')
 
+  const timeExp = /\[(\d{2}):(\d{2}):(\d{2})]/g
+
   export default {
     mixins: [playerMixin],
     data() {
@@ -128,7 +135,9 @@
         currentLyric: null,
         currentLineNum: 0,
         currentShow: 'cd',
-        playingLyric: ''
+        playingLyric: '',
+        isPureMusic: false,
+        pureMusicLyric: ''
       }
     },
     computed: {
@@ -142,7 +151,7 @@
         return this.playing ? 'icon-pause-mini' : 'icon-play-mini'
       },
       cdCls() {
-        return this.playing ? 'play' : 'play pause'
+        return this.playing ? 'play' : ''
       },
       disableCls() {
         return this.songReady ? '' : 'disable'
@@ -242,7 +251,6 @@
         }
         if (this.playlist.length === 1) {
           this.loop()
-          return
         } else {
           let index = this.currentIndex + 1
           if (index === this.playlist.length) {
@@ -253,7 +261,6 @@
             this.togglePlaying()
           }
         }
-        this.songReady = false
       },
       prev() {
         if (!this.songReady) {
@@ -261,7 +268,6 @@
         }
         if (this.playlist.length === 1) {
           this.loop()
-          return
         } else {
           let index = this.currentIndex - 1
           if (index === -1) {
@@ -272,13 +278,20 @@
             this.togglePlaying()
           }
         }
-        this.songReady = false
       },
       ready() {
+        clearTimeout(this.timer)
+        // 监听playing这个事件可以确保慢网速或者快速切换歌曲导致的 DOM Exception
         this.songReady = true
+        this.canLyricPlay = true
         this.savePlayHistory(this.currentSong)
+        // 如果歌曲的播放晚于歌词的出现，播放的时候需要同步歌词
+        if (this.currentLyric && !this.isPureMusic) {
+          this.currentLyric.seek(this.currentTime * 1000)
+        }
       },
       error() {
+        clearTimeout(this.timer)
         this.songReady = true
       },
       updateTime(e) {
@@ -306,8 +319,16 @@
             return
           }
           this.currentLyric = new Lyric(lyric, this.handleLyric)
-          if (this.playing) {
-            this.currentLyric.play()
+          this.isPureMusic = !this.currentLyric.lines.length
+          if (this.isPureMusic) {
+            this.pureMusicLyric = this.currentLyric.lrc.replace(timeExp, '').trim()
+            this.playingLyric = this.pureMusicLyric
+          } else {
+            if (this.playing && this.canLyricPlay) {
+              // 这个时候有可能用户已经播放了歌曲，要切到对应位置
+              // this.currentLyric.seek(this.currentTime * 1000)
+              this.currentLyric.play()
+            }
           }
         }).catch(() => {
           this.currentLyric = null
@@ -327,6 +348,8 @@
       },
       middleTouchStart(e) {
         this.touch.initiated = true
+        // 用来判断是否是一次移动
+        this.touch.moved = false
         const touch = e.touches[0]
         this.touch.startX = touch.pageX
         this.touch.startY = touch.pageY
@@ -341,6 +364,9 @@
         if (Math.abs(deltaY) > Math.abs(deltaX)) {
           return
         }
+        if (!this.touch.moved) {
+          this.touch.moved = true
+        }
         const left = this.currentShow === 'cd' ? 0 : -window.innerWidth
         const offsetWidth = Math.min(0, Math.max(-window.innerWidth, left + deltaX))
         this.touch.percent = Math.abs(offsetWidth / window.innerWidth)
@@ -350,6 +376,9 @@
         this.$refs.middleL.style[transitionDuration] = 0
       },
       middleTouchEnd(e) {
+        if (!this.touch.moved) {
+          return
+        }
         let offsetWidth
         let opacity
         if (this.currentShow === 'cd') {
@@ -400,6 +429,21 @@
           scale
         }
       },
+      /**
+       * 计算内层Image的transform，并同步到外层容器
+       * @param wrapper
+       * @param inner
+       */
+      syncWrapperTransform(wrapper, inner) {
+        if (!this.$refs[wrapper]) {
+          return
+        }
+        let imageWrapper = this.$refs[wrapper]
+        let image = this.$refs[inner]
+        let wTransform = getComputedStyle(imageWrapper)[transform]
+        let iTransform = getComputedStyle(image)[transform]
+        imageWrapper.style[transform] = wTransform === 'none' ? iTransform : iTransform.concat(' ', wTransform)
+      },
       ...mapMutations({
         setFullScreen: 'SET_FULL_SCREEN',
         setPlayingState: 'SET_PLAYING_STATE',
@@ -413,29 +457,55 @@
     },
     watch: {
       currentSong(newSong, oldSong) {
-        if (!newSong.id) {
+        if (!newSong.id || !newSong.url || newSong.id === oldSong.id) {
           return
         }
-        if (newSong.id === oldSong.id) {
-          return
-        }
+        this.songReady = false
+        this.canLyricPlay = false
         if (this.currentLyric) {
           this.currentLyric.stop()
+          // 重置为null
+          this.currentLyric = null
           this.currentTime = 0
           this.playingLyric = ''
           this.currentLineNum = 0
         }
+        this.$refs.audio.src = newSong.url
+        setTimeout(() => {
+          this.$refs.audio.play()
+        }, 20)
+        // 若歌曲 5s 未播放，则认为超时，修改状态确保可以切换歌曲。
         clearTimeout(this.timer)
         this.timer = setTimeout(() => {
-          this.$refs.audio.play()
-          this.getLyric()
-        }, 1000)
+          this.songReady = true
+        }, 5000)
+        this.getLyric()
       },
       playing(newPlaying) {
+        // if (!this.songReady) {
+        //   return
+        // }
         const audio = this.$refs.audio
         this.$nextTick(() => {
           newPlaying ? audio.play() : audio.pause()
         })
+        if (!newPlaying) {
+          if (this.fullScreen) {
+            this.syncWrapperTransform('imageWrapper', 'image')
+          } else {
+            this.syncWrapperTransform('miniWrapper', 'miniImage')
+          }
+        }
+      },
+      // fullScreen(newFullScreen) {
+      //   if (newFullScreen) {
+      //     this.syncWrapperTransform('imageWrapper', 'miniImage')
+      //   } else {
+      //     this.syncWrapperTransform('miniWrapper', 'image')
+      //   }
+      // },
+      songReady(newValue) {
+        console.log(`songReady ${newValue}`)
       }
     },
     components: {
@@ -516,16 +586,11 @@
             top: 0
             width: 80%
             height: 100%
+            box-sizing: border-box
             .cd
               width: 100%
               height: 100%
-              box-sizing: border-box
-              border: 10px solid rgba(255, 255, 255, 0.1)
               border-radius: 50%
-              &.play
-                animation: rotate 20s linear infinite
-              &.pause
-                animation-play-state: paused
               .image
                 position: absolute
                 left: 0
@@ -533,6 +598,12 @@
                 width: 100%
                 height: 100%
                 border-radius: 50%
+                box-sizing: border-box
+                border: 10px solid rgba(255, 255, 255, 0.1)
+                &.play
+                  animation: rotate 20s linear infinite
+                &.pause
+                  animation-play-state: paused
 
           .playing-lyric-wrapper
             width: 80%
@@ -561,6 +632,11 @@
               font-size: $font-size-medium
               &.current
                 color: $color-text
+            .pure-music
+              padding-top: 50%
+              line-height: 32px
+              color: $color-text-l
+              font-size: $font-size-medium
       .bottom
         position: absolute
         bottom: 50px
@@ -647,12 +723,15 @@
         flex: 0 0 40px
         width: 40px
         padding: 0 10px 0 20px
-        img
-          border-radius: 50%
-          &.play
-            animation: rotate 10s linear infinite
-          &.pause
-            animation-play-state: paused
+        .imgWrapper
+          height: 100%
+          width: 100%
+          img
+            border-radius: 50%
+            &.play
+              animation: rotate 10s linear infinite
+            &.pause
+              animation-play-state: paused
       .text
         display: flex
         flex-direction: column

@@ -36,6 +36,8 @@ export default {
       default: 4000
     }
   },
+  created() {
+  },
   mounted() {
     setTimeout(() => {
       this._setSliderWidth()
@@ -46,25 +48,46 @@ export default {
       }
     }, 20)
     window.addEventListener('resize', () => {
-      if (!this.slider) {
+      if (!this.slider || !this.slider.enabled) {
         return
       }
-      this._setSliderWidth(true)
-      this.slider.refresh()
+      clearTimeout(this.resizeTimer)
+      this.resizeTimer = setTimeout(() => {
+        if (this.slider.idInTransition) {
+          this._onScrollEnd()
+        } else {
+          if (this.autoPlay) {
+            this._play()
+          }
+        }
+        this.refresh()
+      }, 60)
     })
   },
   activated() {
+    this.slider.enable()
+    let pageIndex = this.slider.getCurrentPage().pageX
+    this.slider.goToPage(pageIndex, 0, 0)
+    this.currentPageIndex = pageIndex
     if (this.autoPlay) {
       this._play()
     }
   },
   deactivated() {
+    this.slider.disable()
     clearTimeout(this.timer)
   },
   beforeDestroy() {
+    this.slider.disable()
     clearTimeout(this.timer)
   },
   methods: {
+    refresh() {
+      if (this.slider) {
+        this._setSliderWidth(true)
+        this.slider.refresh()
+      }
+    },
     _setSliderWidth(isResize) {
       this.children = this.$refs.sliderGroup.children
       let width = 0
@@ -95,13 +118,24 @@ export default {
         }
         // click: true
       })
-      this.slider.on('scrollEnd', () => {
-        let pageIndex = this.slider.getCurrentPage().pageX
-        this.currentPageIndex = pageIndex
+      this.slider.on('scrollEnd', this._onScrollEnd)
+      this.slider.on('touchend', () => {
         if (this.autoPlay) {
           this._play()
         }
       })
+      this.slider.on('beforeScrollStart', () => {
+        if (this.autoPlay) {
+          clearTimeout(this.timer)
+        }
+      })
+    },
+    _onScrollEnd() {
+      let pageIndex = this.slider.getCurrentPage().pageX
+      this.currentPageIndex = pageIndex
+      if (this.autoPlay) {
+        this._play()
+      }
     },
     _play() {
       clearTimeout(this.timer)
@@ -110,9 +144,6 @@ export default {
       }, this.interval)
     }
   }
-  // destroyed() {
-  //   clearTimeout(this.timer)
-  // }
 }
 </script>
 

@@ -25,3 +25,7 @@ export function debounce(func, delay) {
     }, delay)
   }
 }
+
+export function getCurDate() {
+  return new Date().valueOf()
+}
