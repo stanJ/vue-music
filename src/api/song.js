@@ -1,14 +1,13 @@
-import { commonParams, options } from './config'
+import { commonParams, options, PROD_URL } from './config'
 import { getUid } from 'common/js/uid'
 import axios from 'axios'
 // import { ERR_OK } from 'api/config'
 import jsonp from 'common/js/jsonp'
 
-// const debug = process.env.NODE_ENV !== 'production'
+const debug = process.env.NODE_ENV !== 'production'
 
 export function getLyric(mid) {
-  const url = '/api/lyric'
-
+  const url = debug ? '/api/lyric' : PROD_URL + '/api/lyric'
   const data = Object.assign({}, commonParams, {
     pcachetime: +new Date(),
     songmid: mid,

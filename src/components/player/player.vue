@@ -54,7 +54,7 @@
           <div class="progress-wrapper">
             <span class="time time-l">{{format(currentTime)}}</span>
             <div class="progress-bar-wrapper">
-              <progress-bar :percent="percent" @percentChange="onProgressBarChange"></progress-bar>
+              <progress-bar ref="progressBar" :percent="percent" @percentChange="onProgressBarChange" @percentChanging="onProgressBarChanging"></progress-bar>
             </div>
             <span class="time time-r">{{format(currentSong.duration)}}</span>
           </div>
@@ -101,9 +101,9 @@
     </transition>
     <playlist ref="playlist"></playlist>
     <audio ref="audio"
-           :src="currentSong.url" 
-           @playing="ready" 
+           @playing="ready"
            @error="error"
+           @pause="paused"
            @timeupdate="updateTime"
            @ended="end"></audio>
   </div>
@@ -161,12 +161,11 @@
       },
       ...mapGetters([
         'fullScreen',
-        'playlist',
-        'currentSong',
+        // 'playlist',
         'playing',
-        'currentIndex',
-        'mode',
-        'sequenceList'
+        'currentIndex'
+        // 'mode',
+        // 'sequenceList'
       ])
     },
     created() {
@@ -232,6 +231,7 @@
         }
       },
       end() {
+        this.currentTime = 0
         if (this.mode === playMode.loop) {
           this.loop()
         } else {
@@ -241,6 +241,7 @@
       loop() {
         this.$refs.audio.currentTime = 0
         this.$refs.audio.play()
+        this.setPlayingState(true)
         if (this.currentLyric) {
           this.currentLyric.seek(0)
         }
@@ -290,6 +291,12 @@
           this.currentLyric.seek(this.currentTime * 1000)
         }
       },
+      paused() {
+        this.setPlayingState(false)
+        if (this.currentLyric) {
+          this.currentLyric.stop()
+        }
+      },
       error() {
         clearTimeout(this.timer)
         this.songReady = true
@@ -302,6 +309,12 @@
         const minute = interval / 60 | 0
         const second = this._pad(interval % 60)
         return `${minute}:${second}`
+      },
+      onProgressBarChanging(percent) {
+        this.currentTime = this.currentSong.duration * percent
+        if (this.currentLyric) {
+          this.currentLyric.seek(this.currentTime * 1000)
+        }
       },
       onProgressBarChange(percent) {
         const currentTime = this.currentSong.duration * percent
@@ -326,8 +339,7 @@
           } else {
             if (this.playing && this.canLyricPlay) {
               // 这个时候有可能用户已经播放了歌曲，要切到对应位置
-              // this.currentLyric.seek(this.currentTime * 1000)
-              this.currentLyric.play()
+              this.currentLyric.seek(this.currentTime * 1000)
             }
           }
         }).catch(() => {
@@ -337,6 +349,9 @@
         })
       },
       handleLyric({lineNum, txt}) {
+        if (!this.$refs.lyricLine) {
+          return
+        }
         this.currentLineNum = lineNum
         if (lineNum > 5) {
           let lineEl = this.$refs.lyricLine[lineNum - 5]
@@ -405,6 +420,7 @@
         this.$refs.lyricList.$el.style[transitionDuration] = `${time}ms`
         this.$refs.middleL.style.opacity = opacity
         this.$refs.middleL.style[transitionDuration] = `${time}ms`
+        this.touch.initiated = false
       },
       _pad(num, n = 2) {
         let len = num.toString().length
@@ -471,9 +487,7 @@
           this.currentLineNum = 0
         }
         this.$refs.audio.src = newSong.url
-        setTimeout(() => {
-          this.$refs.audio.play()
-        }, 20)
+        this.$refs.audio.play()
         // 若歌曲 5s 未播放，则认为超时，修改状态确保可以切换歌曲。
         clearTimeout(this.timer)
         this.timer = setTimeout(() => {
@@ -482,9 +496,9 @@
         this.getLyric()
       },
       playing(newPlaying) {
-        // if (!this.songReady) {
-        //   return
-        // }
+        if (!this.songReady) {
+          return
+        }
         const audio = this.$refs.audio
         this.$nextTick(() => {
           newPlaying ? audio.play() : audio.pause()
@@ -495,6 +509,14 @@
           } else {
             this.syncWrapperTransform('miniWrapper', 'miniImage')
           }
+        }
+      },
+      fullScreen(newVal) {
+        if (newVal) {
+          setTimeout(() => {
+            this.$refs.lyricList.refresh()
+            this.$refs.progressBar.setProgressOffset(this.percent)
+          }, 20)
         }
       },
       // fullScreen(newFullScreen) {
