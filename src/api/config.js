@@ -12,4 +12,4 @@ export const options = {
 
 export const ERR_OK = 0
 
-export const PROD_URL = 'http://47.98.38.27:9000/music'
+export const PROD_URL = 'http://47.98.38.27/music'
