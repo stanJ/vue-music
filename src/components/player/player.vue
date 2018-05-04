@@ -661,7 +661,7 @@
               font-size: $font-size-medium
       .bottom
         position: absolute
-        bottom: 50px
+        bottom: 40px
         width: 100%
         .dot-wrapper
           text-align: center

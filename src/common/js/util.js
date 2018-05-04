@@ -16,7 +16,7 @@ export function shuffle(arr) {
 export function debounce(func, delay) {
   let timer
 
-  return function (...args) {
+  return function (...args) { // 使用rest参数代替arguments变量
     if (timer) {
       clearTimeout(timer)
     }
