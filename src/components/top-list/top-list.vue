@@ -43,7 +43,11 @@
         }
         getMusicList(this.topList.id).then((res) => {
           if (res.code === ERR_OK) {
-            this.songs = this._normalizeSongs(res.songlist)
+            // 加点延迟让top-list组件过渡更平滑
+            setTimeout(() => {
+              this.songs = this._normalizeSongs(res.songlist)
+            }, 100)
+            // this.songs = this._normalizeSongs(res.songlist)
           }
         })
       },
